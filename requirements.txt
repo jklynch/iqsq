@@ -1,1 +1,8 @@
-# List required packages in this file, one per line.
+cupy
+ipython
+jupyterlab
+line_profiler
+numpy
+matplotlib
+pandas
+scipy
