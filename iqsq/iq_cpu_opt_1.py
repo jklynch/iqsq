@@ -27,7 +27,6 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
     print(f"unique elements: {unique_elements}")
 
     atom_distance_matrix = atom_distance_matrix_df.to_numpy()
-    Iq_sum_list = []
 
     # loop on q
     q_range = np.arange(qmin, qmax, qstep)
@@ -72,9 +71,13 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
         sin_term_matrix = np.sin(qs * atom_distance_matrix) / (
             qs * atom_distance_matrix
         )
+        print(f"sin_term_matrix:\n{sin_term_matrix}")
         # set the diagonal elements to 1.0
         # need to hit all diagonals!
-        sin_term_matrix[np.diag_indices(sin_term_matrix.shape[0])] = 1.0
+        # sin_term_matrix[np.diag_indices(sin_term_matrix.shape[0])] = 1.0
+
+        sin_term_matrix[np.isnan(sin_term_matrix)] = 1.0
+
         # print("sin_term_matrix")
         # print(sin_term_matrix)
 
@@ -95,8 +98,11 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
 
     print("Iq.shape")
     print(Iq.shape)
-    print(f"Iq_sum_list: {Iq_sum_list}")
-    qIq = np.column_stack((q_range, Iq_sum_list))
+
+    Iq_sums = np.sum(Iq, axis=(1, 2))
+    print(f"Iq_sums:\n{Iq_sums}")
+
+    qIq = np.column_stack((q_range, Iq_sums))
     # print("qIq")
     # print(qIq)
 
