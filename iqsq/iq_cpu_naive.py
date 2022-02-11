@@ -40,7 +40,7 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
     for q in q_range:
         # can we calculate some of this ahead?
         for element in unique_elements:
-            scattering_values = scattering_factors_df[element]
+            scattering_values = scattering_factors_df.loc[element, :]
             fi1 = scattering_values[0] * np.exp(
                 -scattering_values[1] * ((q / (4 * np.pi)) ** 2)
             )
@@ -81,7 +81,7 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
             # print("sin_term_matrix")
             # print(sin_term_matrix)
         elif q == 0.0:
-            sin_term_matrix = np.eye_like(atom_distance_matrix)
+            sin_term_matrix = np.eye(N=atom_distance_matrix.shape[0])
         else:
             # q is less than 0.0
             raise ValueError(f"q is less than zero: {q}")
