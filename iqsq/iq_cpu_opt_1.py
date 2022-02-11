@@ -30,7 +30,7 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
 
     # loop on q
     q_range = np.arange(qmin, qmax, qstep)
-    print(f"q_range: {q_range}")
+    # print(f"q_range: {q_range}")
     print(f"q_range.shape: {q_range.shape}")
 
     # for q in q_range:
@@ -69,7 +69,7 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
     # NaN on the diagonal which will be corrected on the following line
     # this line is the bottleneck when the number of atoms gets large
     sin_term_matrix = np.sin(qs * atom_distance_matrix) / (qs * atom_distance_matrix)
-    print(f"sin_term_matrix:\n{sin_term_matrix}")
+    # print(f"sin_term_matrix:\n{sin_term_matrix}")
     # set the diagonal elements to 1.0
     # need to hit all diagonals!
     # sin_term_matrix[np.diag_indices(sin_term_matrix.shape[0])] = 1.0
@@ -98,7 +98,7 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
     print(Iq.shape)
 
     Iq_sums = np.sum(Iq, axis=(1, 2))
-    print(f"Iq_sums:\n{Iq_sums}")
+    print(f"Iq_sums.shape:\n{Iq_sums.shape}")
 
     qIq = np.column_stack((q_range, Iq_sums))
     # print("qIq")
