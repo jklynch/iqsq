@@ -41,7 +41,7 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
     for q in q_range:
         # can we calculate some of this ahead?
         for element in unique_elements:
-            scattering_values = scattering_factors_df[element]
+            scattering_values = scattering_factors_df.loc[element, :]
             fi1 = scattering_values[0] * np.exp(
                 -scattering_values[1] * ((q / (4 * np.pi)) ** 2)
             )
@@ -56,7 +56,6 @@ def calculate_iq(scattering_factors_df, atom_distance_matrix_df, qmin, qmax, qst
             )
             fic = scattering_values[8]
 
-            # print("atom_element == ", element)
             # print(atom_element == element)
             Fi[0, atom_element == element] = fi1 + fi2 + fi3 + fi4 + fic
 

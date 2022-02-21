@@ -1,5 +1,6 @@
 import cupy as cp
 import numpy as np
+import pandas as pd
 
 
 def calculate_iq(
@@ -7,12 +8,7 @@ def calculate_iq(
 ):
     # atom_element looks like
     #   ['O', 'Co', 'O', 'O', 'O', 'O', 'O', 'Co', 'Co',...]
-    # atom_element = np.array([
-    #    element_number.split('_')[0]
-    #    for element_number
-    #    in atom_distance_matrix_df.columns
-    # ])
-    atom_element = atom_distance_matrix_df.columns
+    atom_element = atom_distance_matrix_df.index
     print("atom_element")
     print(atom_element)
 
@@ -20,64 +16,84 @@ def calculate_iq(
     unique_elements = set(atom_element)
     print(f"unique elements: {unique_elements}")
 
-    atom_distance_matrix = cp.asarray(atom_distance_matrix_df.to_numpy())
-    Iq_sum_list = []
+    atom_distance_matrix = atom_distance_matrix_df.to_numpy()
 
-    # we can allocate this vector once and reuse it
-    # Fi needs shape (1, atoms count) so we can calculate an outer product
-    #   Fi.T * Fi
-    Fi = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    print(f"Fi shape: {Fi.shape}")
-
-    # calculate some vectors that never change
-    Si1 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Gi1 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Si2 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Gi2 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Si3 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Gi3 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Si4 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Gi4 = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    Sic = cp.zeros((1, len(atom_element)), dtype=np.float64)
-    for element in unique_elements:
-        scattering_values = cp.asarray(scattering_factors_df[element])
-        Si1[0, atom_element == element] = scattering_values[0]
-        Gi1[0, atom_element == element] = cp.exp(
-            -scattering_values[1] * (1.0 / (4.0 * cp.pi)) ** 2
-        )
-        Si2[0, atom_element == element] = scattering_values[2]
-        Gi2[0, atom_element == element] = cp.exp(
-            -scattering_values[3] * (1.0 / (4.0 * cp.pi)) ** 2
-        )
-        Si3[0, atom_element == element] = scattering_values[4]
-        Gi3[0, atom_element == element] = cp.exp(
-            -scattering_values[5] * (1.0 / (4.0 * cp.pi)) ** 2
-        )
-        Si4[0, atom_element == element] = scattering_values[6]
-        Gi4[0, atom_element == element] = cp.exp(
-            -scattering_values[7] * (1.0 / (4.0 * cp.pi)) ** 2
-        )
-        Sic[0, atom_element == element] = scattering_values[8]
-
-    sin_matrix_diagonal_index = cp.diag_indices_from(atom_distance_matrix)
+    # work with only the scattering_factors for elements
+    #   in the atom distance matrix
+    # do a little extra work to keep the rows of
+    #   reduced_scattering_factor_df in the same order as
+    #   in scattering_factors_df
+    elements_of_interest = [
+        element
+        for element in scattering_factors_df.index
+        if element in atom_distance_matrix_df.index
+    ]
+    reduced_scattering_factors_df = scattering_factors_df.loc[elements_of_interest]
+    reduced_scattering_factors = reduced_scattering_factors_df.to_numpy()
+    print(f"reduced_scattering_factors.shape: {reduced_scattering_factors.shape}")
 
     # loop on q
     q_range = np.arange(qmin, qmax, qstep)
-    print(f"q_range: {q_range}")
-    for q in q_range:
-        Fi = (
-            Si1 * cp.power(Gi1, q ** 2)
-            + Si2 * cp.power(Gi2, q ** 2)
-            + Si3 * cp.power(Gi3, q ** 2)
-            + Si4 * cp.power(Gi4, q ** 2)
-            + Sic
+    # print(f"q_range: {q_range}")
+    print(f"q_range.shape: {q_range.shape}")
+
+    # how much memory are we looking at for all the q?
+    q_reduced_scattering_size = len(q_range) * np.product(
+        reduced_scattering_factors.shape
+    )
+    print(f"q_reduced_scattering_size: {q_reduced_scattering_size}")
+
+    # we need to expand the shape of q_range from (Q, ) to (Q, 1, 1)
+    #  so that reduced_scattering_factors[:, 1:9:2] * qs_expanded
+    #  has shape (E, 4) * (Q, 1, 1) -> (Q, E, 4)
+    #  where E is the number of elements and Q is the number of qs
+    qs = np.expand_dims(q_range, axis=(1, 2))
+
+    # reduced_scattering_factors has shape (elements, 9)
+    q_element_constants = (
+        np.sum(
+            reduced_scattering_factors[:, 0:8:2]
+            * np.exp(
+                -1 * reduced_scattering_factors[:, 1:9:2] * ((qs / (4 * np.pi)) ** 2)
+            ),
+            axis=2,
         )
-        # print(f"Fi:")
-        # print(Fi)
+        + reduced_scattering_factors[:, 8]
+    )
+    print(f"q_element_constants.shape: {q_element_constants.shape}")
+    print(f"q_element_constants size: {np.prod(q_element_constants.shape)}")
+
+    q_element_constants_df = pd.DataFrame(
+        data=q_element_constants.T,
+        index=reduced_scattering_factors_df.index,
+        columns=q_range,
+    )
+
+    # the approximate storage needed will be
+    #   Q * A * A
+    approximate_storage_size = len(q_range) * np.product(atom_distance_matrix.shape)
+    print(f"Q*A*A: {approximate_storage_size}")
+
+    # Fi_df is a (atoms x q) array for each
+    #   atom in atom_distance_matrixf_df
+    Fi_df = q_element_constants_df.loc[atom_distance_matrix_df.index]
+    print(f"Fi_df.shape: {Fi_df.shape}")
+    # print(f"Fi_df.data: {Fi_df}")
+    print(f"Fi_df size: {np.product(Fi_df.shape)}")
+
+    q_Fi = cp.asarray(Fi_df.to_numpy())
+
+    atom_distance_matrix = cp.asarray(atom_distance_matrix)
+    atom_distance_matrix_diagonal_indices = cp.diag_indices_from(atom_distance_matrix)
+
+    Iq_sum_list = []
+    for qi, q in enumerate(q_range):
+        Fi = cp.expand_dims(q_Fi[:, qi], axis=1)
+        # print(f"Fi.shape: {Fi.shape}")
+
         # print(np.shape(Fi))
         FiFj = Fi.T * Fi
-        # print("FiFj")
-        # print(FiFj)
+        # print(f"FiFj.shape: {FiFj.shape}")
 
         if q > 0.0:
             # the next line will cause a warning like this:
@@ -86,12 +102,13 @@ def calculate_iq(
             # but this is not an error, it tells us the sin_term_matrix has
             # NaN on the diagonal which will be corrected on the following line
 
-            # sin_term_matrix = np.sin(q*atom_distance_matrix) / (q*atom_distance_matrix)
             q_atom_distance_matrix = q * atom_distance_matrix
             sin_term_matrix = cp.sin(q_atom_distance_matrix) / q_atom_distance_matrix
 
             # set the diagonal elements to 1.0
-            sin_term_matrix[sin_matrix_diagonal_index] = 1.0
+            #   very slow for large matrices
+            #   sin_term_matrix[cp.isnan(sin_term_matrix)] = 1.0
+            sin_term_matrix[atom_distance_matrix_diagonal_indices] = 1.0
             # print("sin_term_matrix")
             # print(sin_term_matrix)
         elif q == 0.0:
@@ -110,8 +127,8 @@ def calculate_iq(
 
     # print("Iq.shape")
     # print(Iq.shape)
-    qIq = np.column_stack((q_range, [s.get() for s in Iq_sum_list]))
+    # qIq = np.column_stack((q_range[0], [s.get() for s in Iq_sum_list]))
     # print("qIq")
     # print(qIq)
 
-    return qIq, Fi.get()
+    # return qIq, Fi.get()
