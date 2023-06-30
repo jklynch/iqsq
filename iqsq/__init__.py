@@ -17,16 +17,29 @@ def read_aff_parameters(path, *args, **kwargs):
     return pd.read_csv(filepath_or_buffer=path, *args, **kwargs)
 
 
-def read_atom_positions(atom_positions_path):
+def build_scattering_factors_table(aff_elements_fp, aff_parameters_fp):
+    aff_elements_df = read_aff_elements(path=aff_elements_fp, header=None)
+    aff_parameters_df = read_aff_parameters(
+        path=aff_parameters_fp, header=None, delim_whitespace=True
+    )
+
+    scattering_factors_df = aff_parameters_df
+    scattering_factors_df.index = aff_elements_df[0]
+
+    return scattering_factors_df
+
+
+def read_atom_positions(atom_positions_path, **kwargs):
     """Load data from .xyz file.
     no header
     """
     atom_positions_df = pd.read_table(
         filepath_or_buffer=atom_positions_path,
-        header=None,
-        names=["x", "y", "z"],
-        index_col=0,
-        delim_whitespace=True,
+        **kwargs
+        #header=None,
+        #names=["x", "y", "z"],
+        #index_col=0,
+        #delim_whitespace=True,
     )
     # atom_positions_df.columns = ["x", "y", "z"]
     return atom_positions_df
