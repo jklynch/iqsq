@@ -4,17 +4,24 @@ import pandas as pd
 
 
 def calculate_iq(
-    scattering_factors_df, atom_distance_matrix_df, qmin=0.6, qmax=20, qstep=0.05
+    scattering_factors_df,
+    atom_distance_matrix_df,
+    qmin=0.6,
+    qmax=20,
+    qstep=0.05,
+    verbose=False,
 ):
     # atom_element looks like
     #   ['O', 'Co', 'O', 'O', 'O', 'O', 'O', 'Co', 'Co',...]
     atom_element = atom_distance_matrix_df.index
-    print("atom_element")
-    print(atom_element)
+    if verbose:
+        print("atom_element")
+        print(atom_element)
 
     # set(atom_element) looks like {'O', 'Co'}
     unique_elements = set(atom_element)
-    print(f"unique elements: {unique_elements}")
+    if verbose:
+        print(f"unique elements: {unique_elements}")
 
     atom_distance_matrix = atom_distance_matrix_df.to_numpy()
 
@@ -30,18 +37,21 @@ def calculate_iq(
     ]
     reduced_scattering_factors_df = scattering_factors_df.loc[elements_of_interest]
     reduced_scattering_factors = reduced_scattering_factors_df.to_numpy()
-    print(f"reduced_scattering_factors.shape: {reduced_scattering_factors.shape}")
+    if verbose:
+        print(f"reduced_scattering_factors.shape: {reduced_scattering_factors.shape}")
 
     # loop on q
     q_range = np.arange(qmin, qmax, qstep)
-    # print(f"q_range: {q_range}")
-    print(f"q_range.shape: {q_range.shape}")
+    if verbose:
+        # print(f"q_range: {q_range}")
+        print(f"q_range.shape: {q_range.shape}")
 
     # how much memory are we looking at for all the q?
     q_reduced_scattering_size = len(q_range) * np.product(
         reduced_scattering_factors.shape
     )
-    print(f"q_reduced_scattering_size: {q_reduced_scattering_size}")
+    if verbose:
+        print(f"q_reduced_scattering_size: {q_reduced_scattering_size}")
 
     # we need to expand the shape of q_range from (Q, ) to (Q, 1, 1)
     #  so that reduced_scattering_factors[:, 1:9:2] * qs_expanded
@@ -60,8 +70,9 @@ def calculate_iq(
         )
         + reduced_scattering_factors[:, 8]
     )
-    print(f"q_element_constants.shape: {q_element_constants.shape}")
-    print(f"q_element_constants size: {np.prod(q_element_constants.shape)}")
+    if verbose:
+        print(f"q_element_constants.shape: {q_element_constants.shape}")
+        print(f"q_element_constants size: {np.prod(q_element_constants.shape)}")
 
     q_element_constants_df = pd.DataFrame(
         data=q_element_constants.T,
@@ -72,14 +83,16 @@ def calculate_iq(
     # the approximate storage needed will be
     #   Q * A * A
     approximate_storage_size = len(q_range) * np.product(atom_distance_matrix.shape)
-    print(f"Q*A*A: {approximate_storage_size}")
+    if verbose:
+        print(f"Q*A*A: {approximate_storage_size}")
 
     # Fi_df is a (atoms x q) array for each
     #   atom in atom_distance_matrixf_df
     Fi_df = q_element_constants_df.loc[atom_distance_matrix_df.index]
-    print(f"Fi_df.shape: {Fi_df.shape}")
-    # print(f"Fi_df.data: {Fi_df}")
-    print(f"Fi_df size: {np.product(Fi_df.shape)}")
+    if verbose:
+        print(f"Fi_df.shape: {Fi_df.shape}")
+        # print(f"Fi_df.data: {Fi_df}")
+        print(f"Fi_df size: {np.product(Fi_df.shape)}")
 
     q_Fi = cp.asarray(Fi_df.to_numpy())
 
@@ -123,12 +136,10 @@ def calculate_iq(
 
         # sum Iq for each pair twice, except for "self" pairs such as (O_0, O_0)
         # (pairs from the diagonal of the distance matrix)
+        # cp.sum(Iq) returns a 1-element array
+        # unpack that now
         Iq_sum_list.append(cp.sum(Iq))
 
-    # print("Iq.shape")
-    # print(Iq.shape)
-    # qIq = np.column_stack((q_range[0], [s.get() for s in Iq_sum_list]))
-    # print("qIq")
-    # print(qIq)
+    qIq = np.column_stack((q_range, [Iq_sum.get() for Iq_sum in Iq_sum_list]))
 
-    # return qIq, Fi.get()
+    return qIq, Fi.get()
